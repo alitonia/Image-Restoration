@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Node.js
+node_modules/
+dist/
+.DS_Store
+
+# Large Data & Weights
+training/datasets/*
+training/weights/*.pth
+training/weights/*.onnx
+!training/datasets/.gitkeep
+!training/weights/.gitkeep
+
+# Logs
+*.log
+
+# Ignore all images in datasets/raw except for samples
+training/datasets/raw/*
+!training/datasets/raw/sample*
+

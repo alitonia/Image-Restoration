@@ -1,0 +1,18 @@
+# Deep Learning
+torch
+torchvision
+torchaudio
+timm
+
+# Image Processing
+opencv-python
+Pillow
+scikit-image
+numpy
+
+# Optimization & Utilities
+# basicsr
+# lpips
+tensorboard
+tqdm
+pyyaml
