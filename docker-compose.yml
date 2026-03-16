@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: demo/server/Dockerfile
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./demo/server/uploads:/app/demo/server/uploads
+      - ./demo/server/results:/app/demo/server/results
+      - ./training/weights:/app/training/weights
+    environment:
+      - NODE_ENV=production
+
+  frontend:
+    build:
+      context: demo/client
+      dockerfile: Dockerfile
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    environment:
+      - VITE_API_URL=http://localhost:5000

@@ -23,4 +23,5 @@ training/weights/*.onnx
 # Ignore all images in datasets/raw except for samples
 training/datasets/raw/*
 !training/datasets/raw/sample*
+*.zip
 

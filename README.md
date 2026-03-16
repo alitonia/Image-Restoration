@@ -49,8 +49,17 @@ The pipeline uses **Synthetic Degradation** with the following features:
 - **Reproducibility**: All scripts support a `--seed` argument for replicable results.
 
 ---
+## 🐳 Docker Deployment (Demo Only)
+If you have Docker and Docker Compose installed, you can run the entire demo suite with a single command:
+```bash
+docker-compose up --build
+```
+- **Frontend**: http://localhost:5173
+- **Backend**: http://localhost:5000
 
-## 🖥️ Running the Web Demo
+---
+
+## 🖥️ Running the Web Demo Manually
 
 ### Backend
 ```bash

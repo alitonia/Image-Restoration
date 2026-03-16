@@ -24,15 +24,17 @@ function App() {
     const formData = new FormData();
     formData.append('image', selectedFile);
 
+    const apiUrl = import.meta.env.VITE_API_URL || 'http://localhost:5000';
+
     try {
-      const response = await fetch('http://localhost:5000/api/restore', {
+      const response = await fetch(`${apiUrl}/api/restore`, {
         method: 'POST',
         body: formData,
       });
 
       const data = await response.json();
       if (data.success) {
-        setRestoredUrl(`http://localhost:5000${data.restoredImage}`);
+        setRestoredUrl(`${apiUrl}${data.restoredImage}`);
       } else {
         alert('Restoration failed.');
       }

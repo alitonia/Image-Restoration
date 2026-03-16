@@ -42,9 +42,11 @@ app.post('/api/restore', upload.single('image'), (req, res) => {
     console.log(`Starting restoration for: ${inputPath}`);
 
     // Call Python script
-    // Note: We'll need to create this script in training/scripts/inference.py
-    const pythonProcess = spawn('../../training/venv/bin/python', [
-        '../../training/scripts/inference.py',
+    const pythonPath = process.env.PYTHON_PATH || '../../training/venv/bin/python';
+    const scriptPath = process.env.INFERENCE_SCRIPT_PATH || '../../training/scripts/inference.py';
+
+    const pythonProcess = spawn(pythonPath, [
+        scriptPath,
         '--input', path.resolve(inputPath),
         '--output', path.resolve(outputPath)
     ]);
