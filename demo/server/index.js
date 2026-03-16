@@ -31,45 +31,53 @@ const storage = multer.diskStorage({
 
 const upload = multer({ storage: storage });
 
-app.post('/api/restore', upload.single('image'), (req, res) => {
+app.post('/api/restore', upload.single('image'), async (req, res) => {
     if (!req.file) {
         return res.status(400).send('No file uploaded.');
     }
 
+    const { method = 'swinir' } = req.body;
     const inputPath = req.file.path;
-    const outputPath = path.join('results', `restored-${req.file.filename}`);
+    const results = {};
 
-    console.log(`Starting restoration for: ${inputPath}`);
+    const runInference = (script, outputSuffix, extraArgs = []) => {
+        return new Promise((resolve, reject) => {
+            const outputPath = path.join('results', `${outputSuffix}-${req.file.filename}`);
+            const pythonPath = process.env.PYTHON_PATH || '../../training/venv/bin/python';
+            const scriptPath = path.join('../../training/scripts', script);
 
-    // Call Python script
-    const pythonPath = process.env.PYTHON_PATH || '../../training/venv/bin/python';
-    const scriptPath = process.env.INFERENCE_SCRIPT_PATH || '../../training/scripts/inference.py';
+            console.log(`Running ${script} for: ${inputPath}`);
+            const pythonProcess = spawn(pythonPath, [
+                scriptPath,
+                '--input', path.resolve(inputPath),
+                '--output', path.resolve(outputPath),
+                ...extraArgs
+            ]);
 
-    const pythonProcess = spawn(pythonPath, [
-        scriptPath,
-        '--input', path.resolve(inputPath),
-        '--output', path.resolve(outputPath)
-    ]);
-
-    pythonProcess.stdout.on('data', (data) => {
-        console.log(`Python: ${data}`);
-    });
-
-    pythonProcess.stderr.on('data', (data) => {
-        console.error(`Python Error: ${data}`);
-    });
-
-    pythonProcess.on('close', (code) => {
-        if (code === 0) {
-            res.json({
-                success: true,
-                restoredImage: `/results/restored-${req.file.filename}`,
-                originalImage: `/uploads/${req.file.filename}`
+            pythonProcess.on('close', (code) => {
+                if (code === 0) resolve(`/results/${outputSuffix}-${req.file.filename}`);
+                else reject(new Error(`${script} failed with code ${code}`));
             });
-        } else {
-            res.status(500).json({ success: false, error: 'Restoration failed' });
+        });
+    };
+
+    try {
+        if (method === 'swinir' || method === 'both') {
+            results.swinir = await runInference('inference_swinir.py', 'swinir');
         }
-    });
+        if (method === 'sd' || method === 'both') {
+            results.sd = await runInference('inference_sd.py', 'sd');
+        }
+
+        res.json({
+            success: true,
+            originalImage: `/uploads/${req.file.filename}`,
+            results
+        });
+    } catch (error) {
+        console.error('Restoration Error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 app.listen(port, () => {

@@ -37,6 +37,7 @@ body {
   font-weight: 800;
   background: linear-gradient(to right, #818cf8, #c084fc);
   -webkit-background-clip: text;
+  background-clip: text;
   -webkit-text-fill-color: transparent;
   margin-bottom: 3rem;
 }
@@ -148,4 +149,70 @@ body {
 .stat-value {
   font-size: 1.25rem;
   font-weight: 700;
+}
+.method-selector {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1.5rem;
+  background: rgba(0,0,0,0.2);
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+}
+
+.tab-btn {
+  flex: 1;
+  padding: 0.6rem;
+  border: none;
+  background: transparent;
+  color: #94a3b8;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  font-weight: 600;
+  transition: all 0.2s;
+  font-size: 0.85rem;
+}
+
+.tab-btn.active {
+  background: var(--glass);
+  color: white;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+}
+
+.view-toggle {
+  display: flex;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+}
+
+.view-toggle button {
+  background: transparent;
+  border: 1px solid var(--glass-border);
+  color: #94a3b8;
+  padding: 0.4rem 1rem;
+  border-radius: 2rem;
+  cursor: pointer;
+  font-size: 0.8rem;
+  transition: all 0.2s;
+}
+
+.view-toggle button.active {
+  background: var(--primary);
+  color: white;
+  border-color: var(--primary);
+}
+
+.loader {
+  background: var(--bg-dark);
+  padding: 1rem 2rem;
+  border-radius: 1rem;
+  border: 1px solid var(--primary);
+  box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.8; }
+  50% { opacity: 1; transform: scale(1.05); }
+  100% { opacity: 0.8; }
 }

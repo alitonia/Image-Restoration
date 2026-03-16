@@ -1,56 +1,42 @@
-# 🖼️ Image Restoration with Swin Transformer
+# 🖼️ Image Restoration: Deterministic vs. Generative
 
-A high-performance image restoration project using **SwinIR-Light**. This project is designed to handle denoising, deblurring, and removing physical damage (scratches, yellowing) from historical photographs.
+A comprehensive image restoration platform comparing **Deterministic Reconstruction (SwinIR-Light)** against **Generative AI Restoration (Stable Diffusion + ControlNet)**. This project is designed to handle denoising, deblurring, and complex physical damage removal from historical photographs.
 
 ---
 
 ## 🏗️ Project Structure
 
-- **`training/`**: PyTorch implementation, training scripts, and utilities.
-- **`demo/`**: Web application suite.
-    - **`client/`**: React (Vite) frontend with a comparison slider.
-    - **`server/`**: Node.js Express backend bridging to the Python model.
+- **`training/`**: PyTorch models, Diffusion pipelines, and Benchmarking scripts.
+- **`demo/`**: Web application suite for side-by-side comparison.
+    - **`client/`**: React (Vite) dashboard with 3-way comparison sliders.
+    - **`server/`**: Node.js Express backend bridging to multiple Python inference engines.
 
 ---
 
-## 🚀 Training Guide
+## 🚀 Training & Inference
 
-### 1. Local Setup (Validation)
-If you want to test the pipeline locally on a small dataset:
-```bash
-cd training
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate # Linux/Mac
-# Install dependencies
-pip install -r requirements.txt
+### 1. Dual Restoration Engines
+- **SwinIR-Light**: Uses Window-based Multi-head Self-Attention for pixel-accurate reconstruction.
+- **SD + ControlNet**: Uses generative inpainting conditioned on Canny edges and Tiles to "re-draw" missing sections.
 
-# Run Lite Data Preparation (Cleans old data and uses Seed 42)
-./prepare_lite.sh
-
-# Run quick training test
-python scripts/train.py --clean_dir ./datasets/processed/clean --damaged_dir ./datasets/processed/damaged --epochs 1
-```
-
-### 2. High-Performance Training (Google Colab)
-For deep training sessions on powerful GPUs:
+### 2. High-Performance Benchmarking (Google Colab)
+For deep training and heavy diffusion inference:
 1. Run `./prepare_for_colab.sh` in the project root to create `restoration_training.zip`.
-2. Upload `restoration_training.zip` to the root of your **Google Drive**.
-3. Open `training/colab_training.ipynb` in [Google Colab](https://colab.research.google.com).
-4. Follow the notebook steps to mount Drive and start training.
+2. Upload to **Google Drive** and open `training/colab_training.ipynb` in Colab.
+3. Compare both methods on the exact same dataset using our fixed `--seed 42`.
 
 ---
 
 ## 🛠️ Data Preparation Details
-The pipeline uses **Synthetic Degradation** with the following features:
-- **Localized Damage**: Random masks (rectangles, ellipses) ensure damage only affects parts of the image.
-- **Realistic Aging**: Yellowing, color fading, and simulated damping/water stains.
-- **Deduplication**: SHA256 hashing prevents redundant processing and ensures unique mapping.
-- **Reproducibility**: All scripts support a `--seed` argument for replicable results.
+The pipeline uses **Synthetic Degradation** with localized randomization:
+- **Localized Damage**: Random masks (rectangles, ellipses) target specific parts of the image.
+- **Realistic Aging**: Yellowing, color fading, and simulated paper tears.
+- **Reproducibility**: All benchmarking runs are seeded for exact replicability.
 
 ---
-## 🐳 Docker Deployment (Demo Only)
-If you have Docker and Docker Compose installed, you can run the entire demo suite with a single command:
+
+## 🐳 Docker Deployment (Comparison Suite)
+Run the entire dual-method demo with a single command:
 ```bash
 docker-compose up --build
 ```
@@ -59,35 +45,9 @@ docker-compose up --build
 
 ---
 
-## 🖥️ Running the Web Demo Manually
-
-### Backend
-```bash
-cd demo/server
-npm install
-npm start
-```
-
-### Frontend
-```bash
-cd demo/client
-npm install
-npm run dev
-```
-
----
-
-## 📊 Evaluation
-Run the evaluation script to calculate **PSNR** and **SSIM** metrics:
-```bash
-cd training
-python scripts/evaluate.py --clean_dir ./datasets/processed/clean --damaged_dir ./datasets/processed/damaged --weights ../weights/swinir_restoration.pth
-```
-
----
-
 ## ✨ Features
-- [x] Window-based Multi-head Self-Attention (W-MSA).
-- [x] Localized damage simulation (Noise, Blur, Scratches, Yellowing).
-- [x] Optimized for low-resource hardware (AMP, Patch-based training).
-- [x] Professional UI with Glassmorphism and comparison slider.
+- [x] Dual Engine Architecture (Deterministic vs. Generative).
+- [x] Localized damage simulation with fixed seeding.
+- [x] Multi-method comparison slider (Before / SwinIR / AI).
+- [x] Optimized for 4GB VRAM (Tiling, xFormers, LoRA).
+- [x] Professional UI with Real-time Performance tracking.

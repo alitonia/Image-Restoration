@@ -3,16 +3,19 @@ torch
 torchvision
 torchaudio
 timm
+diffusers
+transformers
+accelerate
+controlnet_aux
 
 # Image Processing
 opencv-python
 Pillow
 scikit-image
 numpy
+xformers
 
 # Optimization & Utilities
-# basicsr
-# lpips
 tensorboard
 tqdm
 pyyaml

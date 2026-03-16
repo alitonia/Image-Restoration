@@ -26,15 +26,15 @@ RUN npm install
 # Copy source code
 WORKDIR /app
 COPY training/src ./training/src
-COPY training/scripts/inference.py ./training/scripts/
+COPY training/scripts/inference_swinir.py ./training/scripts/
+COPY training/scripts/inference_sd.py ./training/scripts/
 COPY training/weights ./training/weights
 COPY demo/server ./demo/server
 
 WORKDIR /app/demo/server
 
-# Environment variables for the Node server to find Python and its dependencies
+# Environment variables
 ENV PYTHON_PATH=python3
-ENV INFERENCE_SCRIPT_PATH=/app/training/scripts/inference.py
 ENV PORT=5000
 
 # Create uploads and results directories
