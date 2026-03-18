@@ -6,21 +6,26 @@ echo "📦 Preparing project for Google Colab..."
 # Move to the root directory
 cd "$(dirname "$0")"
 
-# Remove old zip if it exists
-rm -f restoration_training.zip
+# 1. Zip ONLY the processed data (No compression - FAST)
+echo "📦 Packaging DATASET (processed_data.zip)..."
+rm -f processed_data.zip
+if [ -d "training/datasets/processed" ]; then
+    zip -r processed_data.zip training/datasets/processed/
+else
+    echo "⚠️ Warning: training/datasets/processed not found. Skipping data zip."
+fi
 
-# Create the zip file
-# Excludes: venv (too large), processed data (can be regenerated or uploaded separately), 
-# and git files.
-zip -r restoration_training.zip training/ \
-    -x "training/venv/*" \
+# 2. Zip ONLY the source code (Standard compression)
+echo "📦 Packaging CODE (restoration_code.zip)..."
+rm -f restoration_code.zip
+zip -r restoration_code.zip training/ \
     -x "training/datasets/processed/*" \
     -x "training/datasets/raw/*" \
+    -x "training/venv/*" \
     -x "**/__pycache__/*" \
     -x "**/.ipynb_checkpoints/*"
 
 echo "✅ Preparation complete!"
 echo "🚀 Next steps:"
-echo "1. Download 'restoration_training.zip' to your local machine."
-echo "2. Upload it to the root of your Google Drive."
-echo "3. Open 'training/colab_training.ipynb' in Colab and follow the instructions."
+echo "1. Upload BOTH 'processed_data.zip' and 'restoration_code.zip' to Google Drive."
+echo "2. Open 'training/colab_training.ipynb' in Colab and follow the instructions."

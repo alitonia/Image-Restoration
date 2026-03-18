@@ -21,6 +21,9 @@ from glob import glob
 class SDLoraDataset(Dataset):
     def __init__(self, image_dir, caption="a restored antique photo", tokenizer=None, size=512):
         self.image_files = sorted(glob(os.path.join(image_dir, '*.*')))
+        if len(self.image_files) == 0:
+            raise ValueError(f"No images found for SD-LoRA training in {image_dir}!")
+        print(f"SD-LoRA Dataset: Found {len(self.image_files)} training images.")
         self.caption = caption
         self.tokenizer = tokenizer
         self.size = size
@@ -55,6 +58,9 @@ def main():
     parser.add_argument('--seed', type=int, default=42)
     parser.add_argument('--resolution', type=int, default=512)
     parser.add_argument('--resume', action='store_true', help='Resume from latest checkpoint')
+    parser.add_argument('--validation_prompt', type=str, default="a restored antique photo", help='Prompt for validation')
+    parser.add_argument('--num_validation_images', type=int, default=1, help='How many validation images per epoch')
+    parser.add_argument('--val_dir', type=str, default=None, help='Directory to save validation images')
     args = parser.parse_args()
 
     accelerator = Accelerator(gradient_accumulation_steps=4, mixed_precision="fp16")
@@ -149,7 +155,28 @@ def main():
             unet.save_pretrained(save_path)
             # Save latest state for resuming
             accelerator.save_state(checkpoint_dir)
-            accelerator.print(f"Checkpoint saved at {save_path} and state at {checkpoint_dir}")
+            accelerator.print(f"✅ Checkpoint saved at {save_path}")
+
+            # Visual Validation
+            if args.val_dir:
+                accelerator.print(f"🎨 Generating validation images for epoch {epoch}...")
+                unet.eval()
+                pipeline = StableDiffusionPipeline.from_pretrained(
+                    args.model_id, 
+                    unet=accelerator.unwrap_model(unet), 
+                    text_encoder=text_encoder, 
+                    vae=vae, 
+                    torch_dtype=weight_dtype
+                ).to(accelerator.device)
+                
+                os.makedirs(args.val_dir, exist_ok=True)
+                for i in range(args.num_validation_images):
+                    image = pipeline(args.validation_prompt).images[0]
+                    image.save(os.path.join(args.val_dir, f"val_{epoch}_{i}.png"))
+                
+                del pipeline # Free memory
+                torch.cuda.empty_cache()
+                unet.train()
 
     print("LoRA training complete!")
 

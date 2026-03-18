@@ -180,71 +180,86 @@ def add_compression(img):
 def save_pair(clean_img_uint8, damaged_img_float, output_path, name_prefix, suffix, file_ext):
     clean_dir = output_path / 'clean'
     damaged_dir = output_path / 'damaged'
+    clean_dir.mkdir(parents=True, exist_ok=True)
+    damaged_dir.mkdir(parents=True, exist_ok=True)
+    
     target_name = f"{name_prefix}_{suffix}{file_ext}"
     cv2.imwrite(str(clean_dir / target_name), clean_img_uint8)
     damaged_img_uint8 = (damaged_img_float * 255).astype(np.uint8)
     cv2.imwrite(str(damaged_dir / target_name), damaged_img_uint8)
 
-def process_images_recursive(input_dir, output_dir, multiplier=1):
+def process_images_recursive(input_dir, output_dir, multiplier=1, split_ratio=0.9):
     input_path = Path(input_dir)
     output_path = Path(output_dir)
-    (output_path / 'clean').mkdir(parents=True, exist_ok=True)
-    (output_path / 'damaged').mkdir(parents=True, exist_ok=True)
 
     extensions = ('*.jpg', '*.jpeg', '*.png', '*.bmp', '*.webp')
     image_paths = []
     for ext in extensions:
         image_paths.extend(input_path.rglob(ext))
     
-    print(f"Found {len(image_paths)} images. Multiplier: {multiplier}. Generating complex damages...")
+    # Shuffle for random split
+    random.shuffle(image_paths)
+    split_idx = int(len(image_paths) * split_ratio)
+    train_paths = image_paths[:split_idx]
+    test_paths = image_paths[split_idx:]
+    
+    print(f"Found {len(image_paths)} images. Split: {len(train_paths)} Train / {len(test_paths)} Test. Multiplier: {multiplier}.")
     
     processed_hashes = set()
-    for path in tqdm(image_paths):
-        file_hash = get_file_hash(path)
-        if file_hash in processed_hashes: continue
-        processed_hashes.add(file_hash)
-
-        img = cv2.imread(str(path))
-        if img is None: continue
+    
+    # Sub-task lists for easier looping
+    tasks = [('train', train_paths), ('test', test_paths)]
+    
+    for subset_name, paths in tasks:
+        subset_output = output_path / subset_name
+        print(f"Processing {subset_name} set...")
         
-        # Resize to 512 for standard training if too large
-        if img.shape[0] > 1024 or img.shape[1] > 1024:
-             img = cv2.resize(img, (1024, 1024), interpolation=cv2.INTER_AREA)
+        for path in tqdm(paths):
+            file_hash = get_file_hash(path)
+            if file_hash in processed_hashes: continue
+            processed_hashes.add(file_hash)
 
-        img_float = img.astype(np.float32) / 255.0
-        
-        for m in range(multiplier):
-            # Apply a sequence of random damages (Multiple types per image)
-            damaged = img_float.copy()
+            img = cv2.imread(str(path))
+            if img is None: continue
             
-            # Damage List: [Probability, Function]
-            damage_pipeline = [
-                (0.8, lambda i: add_blur(i, localized=random.choice([True, False]))),
-                (0.8, lambda i: add_noise(i, localized=random.choice([True, False]))),
-                (0.6, lambda i: add_yellowing(i, localized=random.choice([True, False]))),
-                (0.7, add_scratches),
-                (0.4, add_folds),
-                (0.4, add_water_stains),
-                (0.5, add_mold_spots),
-                (0.3, add_noise_patch),
-                (0.6, add_compression),
-            ]
+            # Resize slightly if too large for memory
+            if img.shape[0] > 1024 or img.shape[1] > 1024:
+                 img = cv2.resize(img, (1024, 1024), interpolation=cv2.INTER_AREA)
+
+            img_float = img.astype(np.float32) / 255.0
             
-            # Randomly shuffle and apply a subset
-            random.shuffle(damage_pipeline)
-            applied_count = 0
-            for prob, func in damage_pipeline:
-                if random.random() < prob:
-                    damaged = func(damaged)
-                    applied_count += 1
-                if applied_count >= 5: break # Max 5 types per image
-            
-            # Ensure at least one damage is applied
-            if applied_count == 0:
-                damaged = add_noise(damaged)
-            
-            suffix = f"complex_{m}" if multiplier > 1 else "complex"
-            save_pair(img, damaged, output_path, file_hash, suffix, path.suffix)
+            for m in range(multiplier):
+                # Apply a sequence of random damages (Multiple types per image)
+                damaged = img_float.copy()
+                
+                # Damage List: [Probability, Function]
+                damage_pipeline = [
+                    (0.8, lambda i: add_blur(i, localized=random.choice([True, False]))),
+                    (0.8, lambda i: add_noise(i, localized=random.choice([True, False]))),
+                    (0.6, lambda i: add_yellowing(i, localized=random.choice([True, False]))),
+                    (0.7, add_scratches),
+                    (0.4, add_folds),
+                    (0.4, add_water_stains),
+                    (0.5, add_mold_spots),
+                    (0.3, add_noise_patch),
+                    (0.6, add_compression),
+                ]
+                
+                # Randomly shuffle and apply a subset
+                random.shuffle(damage_pipeline)
+                applied_count = 0
+                for prob, func in damage_pipeline:
+                    if random.random() < prob:
+                        damaged = func(damaged)
+                        applied_count += 1
+                    if applied_count >= 5: break # Max 5 types per image
+                
+                # Ensure at least one damage is applied
+                if applied_count == 0:
+                    damaged = add_noise(damaged)
+                
+                suffix = f"complex_{m}" if multiplier > 1 else "complex"
+                save_pair(img, damaged, subset_output, file_hash, suffix, path.suffix)
 
 if __name__ == "__main__":
     import argparse
@@ -253,6 +268,7 @@ if __name__ == "__main__":
     parser.add_argument('--output', type=str, default='../datasets/processed')
     parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducibility')
     parser.add_argument('--multiplier', type=int, default=1, help='How many damaged images per source')
+    parser.add_argument('--split_ratio', type=float, default=0.9, help='Train/Test split ratio')
     args = parser.parse_args()
     
     if args.seed is not None:
@@ -260,4 +276,4 @@ if __name__ == "__main__":
         np.random.seed(args.seed)
         print(f"Random seed set to: {args.seed}")
     
-    process_images_recursive(args.input, args.output, args.multiplier)
+    process_images_recursive(args.input, args.output, args.multiplier, args.split_ratio)
