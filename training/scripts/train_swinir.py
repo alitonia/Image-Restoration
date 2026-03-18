@@ -8,10 +8,18 @@ import numpy as np
 import argparse
 from glob import glob
 from tqdm import tqdm
-import sys
+import random
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from src.model import create_model
+
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    # Ensure reproducible results even on multi-worker loaders (optional but good)
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
 class RestorationDataset(Dataset):
     def __init__(self, clean_dir, damaged_dir, patch_size=64):
@@ -54,10 +62,13 @@ def train():
     parser.add_argument('--batch_size', type=int, default=8) # Small for 4GB VRAM
     parser.add_argument('--patch_size', type=int, default=64)
     parser.add_argument('--weight_path', type=str, default='../weights/swinir_restoration.pth')
+    parser.add_argument('--resume', action='store_true', help='Resume training from checkpoint')
+    parser.add_argument('--seed', type=int, default=42, help='Random seed for reproducibility')
     args = parser.parse_args()
 
+    set_seed(args.seed)
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"Training on: {device}")
+    print(f"Training on: {device} | Seed: {args.seed}")
 
     # Model
     model = create_model(upscale=1).to(device) # upscale=1 for direct restoration
@@ -65,12 +76,28 @@ def train():
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     scaler = torch.cuda.amp.GradScaler() # For Mixed Precision (important for RTX 2050)
 
+    start_epoch = 0
+    checkpoint_path = args.weight_path.replace('.pth', '_checkpoint.pth')
+    
+    # Resume logic
+    if args.resume and os.path.exists(checkpoint_path):
+        print(f"Loading checkpoint: {checkpoint_path}")
+        checkpoint = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(checkpoint['model_state_dict'])
+        optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        scaler.load_state_dict(checkpoint['scaler_state_dict'])
+        start_epoch = checkpoint['epoch'] + 1
+        print(f"Resuming from epoch: {start_epoch}")
+    elif os.path.exists(args.weight_path) and args.resume:
+        print(f"Loading weights only: {args.weight_path}")
+        model.load_state_dict(torch.load(args.weight_path, map_location=device))
+
     dataset = RestorationDataset(args.clean_dir, args.damaged_dir, args.patch_size)
     loader = DataLoader(dataset, batch_size=args.batch_size, shuffle=True, num_workers=4)
 
     best_loss = float('inf')
 
-    for epoch in range(args.epochs):
+    for epoch in range(start_epoch, args.epochs):
         model.train()
         epoch_loss = 0
         pbar = tqdm(loader, desc=f"Epoch {epoch+1}/{args.epochs}")
@@ -95,12 +122,21 @@ def train():
         avg_loss = epoch_loss / len(loader)
         print(f"Epoch {epoch+1} Average Loss: {avg_loss:.6f}")
 
-        # Save Best
+        # Save Best and Checkpoint
         if avg_loss < best_loss:
             best_loss = avg_loss
             os.makedirs(os.path.dirname(args.weight_path), exist_ok=True)
             torch.save(model.state_dict(), args.weight_path)
-            print("Model saved.")
+            
+            # Save full checkpoint for resuming
+            torch.save({
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'scaler_state_dict': scaler.state_dict(),
+                'loss': avg_loss,
+            }, checkpoint_path)
+            print(f"Model and checkpoint saved at epoch {epoch+1}.")
 
 if __name__ == "__main__":
     train()

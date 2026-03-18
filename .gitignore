@@ -25,3 +25,6 @@ training/datasets/raw/*
 !training/datasets/raw/sample*
 *.zip
 
+*.md
+!README.md
+

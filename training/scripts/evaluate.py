@@ -14,47 +14,67 @@ from src.model import create_model
 
 def evaluate():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--clean_dir', type=str, required=True)
-    parser.add_argument('--damaged_dir', type=str, required=True)
-    parser.add_argument('--weights', type=str, required=True)
+    parser.add_argument('--clean_dir', type=str, required=True, help='Ground truth images')
+    parser.add_argument('--damaged_dir', type=str, required=False, help='Damaged images (only if using --weights)')
+    parser.add_argument('--restored_dir', type=str, required=False, help='Folder of already restored images for evaluation')
+    parser.add_argument('--weights', type=str, required=False, help='SwinIR model weights')
     args = parser.parse_args()
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = create_model(upscale=1).to(device)
-    model.load_state_dict(torch.load(args.weights, map_location=device))
-    model.eval()
-
     clean_files = sorted(glob(os.path.join(args.clean_dir, '*.*')))
-    damaged_files = sorted(glob(os.path.join(args.damaged_dir, '*.*')))
-
+    
     psnr_total = 0
     ssim_total = 0
     count = 0
 
-    print("Evaluating model...")
-    for c_file, d_file in tqdm(zip(clean_files, damaged_files), total=len(clean_files)):
-        clean_img = cv2.imread(c_file)
-        damaged_img = cv2.imread(d_file)
+    if args.weights:
+        print(f"Evaluating SwinIR model with weights: {args.weights}")
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = create_model(upscale=1).to(device)
+        model.load_state_dict(torch.load(args.weights, map_location=device))
+        model.eval()
+        
+        damaged_files = sorted(glob(os.path.join(args.damaged_dir, '*.*')))
+        
+        for c_file, d_file in tqdm(zip(clean_files, damaged_files), total=len(clean_files)):
+            clean_img = cv2.imread(c_file)
+            damaged_img = cv2.imread(d_file)
+            
+            img_input = damaged_img.astype(np.float32) / 255.0
+            img_input = torch.from_numpy(np.transpose(img_input[:, :, [2, 1, 0]], (2, 0, 1))).unsqueeze(0).to(device)
+            
+            with torch.no_grad():
+                output = model(img_input)
+            
+            output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
+            output = np.transpose(output[[2, 1, 0], :, :], (1, 2, 0))
+            output = (output * 255.0).round().astype(np.uint8)
+            
+            psnr = psnr_metric(clean_img, output)
+            ssim = ssim_metric(clean_img, output, channel_axis=2)
+            psnr_total += psnr
+            ssim_total += ssim
+            count += 1
 
-        # Preprocess
-        img_input = damaged_img.astype(np.float32) / 255.0
-        img_input = torch.from_numpy(np.transpose(img_input[:, :, [2, 1, 0]], (2, 0, 1))).unsqueeze(0).to(device)
+    elif args.restored_dir:
+        print(f"Evaluating restored folder: {args.restored_dir}")
+        restored_files = sorted(glob(os.path.join(args.restored_dir, '*.*')))
+        
+        for c_file, r_file in tqdm(zip(clean_files, restored_files), total=len(clean_files)):
+            clean_img = cv2.imread(c_file)
+            restored_img = cv2.imread(r_file)
+            
+            # Resize restored if needed to match GT (SD might produce 512x512)
+            if restored_img.shape != clean_img.shape:
+                restored_img = cv2.resize(restored_img, (clean_img.shape[1], clean_img.shape[0]), interpolation=cv2.INTER_LANCZOS4)
 
-        with torch.no_grad():
-            output = model(img_input)
-
-        # Postprocess
-        output = output.data.squeeze().float().cpu().clamp_(0, 1).numpy()
-        output = np.transpose(output[[2, 1, 0], :, :], (1, 2, 0))
-        output = (output * 255.0).round().astype(np.uint8)
-
-        # Calculate metrics
-        psnr = psnr_metric(clean_img, output)
-        ssim = ssim_metric(clean_img, output, channel_axis=2)
-
-        psnr_total += psnr
-        ssim_total += ssim
-        count += 1
+            psnr = psnr_metric(clean_img, restored_img)
+            ssim = ssim_metric(clean_img, restored_img, channel_axis=2)
+            psnr_total += psnr
+            ssim_total += ssim
+            count += 1
+    else:
+        print("Error: Provide either --weights or --restored_dir")
+        return
 
     print(f"\nFinal Results:")
     print(f"Average PSNR: {psnr_total / count:.2f} dB")

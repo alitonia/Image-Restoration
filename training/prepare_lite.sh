@@ -5,5 +5,5 @@ echo "Cleaning old processed data..."
 rm -rf ./datasets/processed
 
 echo "Starting Lite Data Preparation..."
-./venv/bin/python scripts/prepare_data.py --input ./datasets/raw_lite --output ./datasets/processed --seed 42
+./venv/bin/python scripts/prepare_data.py --input ./datasets/raw_lite --output ./datasets/processed --seed 42 --multiplier 10
 echo "Lite Data Preparation Complete."

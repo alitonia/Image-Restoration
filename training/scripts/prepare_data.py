@@ -16,7 +16,7 @@ def get_file_hash(file_path):
 
 def get_random_mask(h, w):
     """Generates a random mask (0 to 1) for localized damage."""
-    mask_type = random.choice(['full', 'rect', 'ellipse', 'multiply'])
+    mask_type = random.choice(['full', 'rect', 'ellipse', 'multiply', 'brush', 'poly'])
     mask = np.ones((h, w, 1), dtype=np.float32)
     
     if mask_type == 'full':
@@ -32,7 +32,7 @@ def get_random_mask(h, w):
     if mask_type == 'ellipse':
         sub_mask = np.zeros((h, w, 1), dtype=np.float32)
         center = (random.randint(0, w), random.randint(0, h))
-        axes = (random.randint(20, w), random.randint(20, h))
+        axes = (random.randint(20, w//2), random.randint(20, h//2))
         angle = random.randint(0, 360)
         cv2.ellipse(sub_mask, center, axes, angle, 0, 360, 1.0, -1)
         return sub_mask
@@ -40,10 +40,28 @@ def get_random_mask(h, w):
     if mask_type == 'multiply':
         # Multiple small patches
         sub_mask = np.zeros((h, w, 1), dtype=np.float32)
-        for _ in range(random.randint(2, 5)):
+        for _ in range(random.randint(3, 8)):
               center = (random.randint(0, w), random.randint(0, h))
-              axes = (random.randint(10, w//4), random.randint(10, h//4))
+              axes = (random.randint(5, w//6), random.randint(5, h//6))
               cv2.ellipse(sub_mask, center, axes, random.randint(0, 360), 0, 360, 1.0, -1)
+        return sub_mask
+    
+    if mask_type == 'brush':
+        # Simulate a brush stroke / tear
+        sub_mask = np.zeros((h, w, 1), dtype=np.float32)
+        start_point = (random.randint(0, w), random.randint(0, h))
+        for _ in range(random.randint(5, 15)):
+            end_point = (start_point[0] + random.randint(-w//4, w//4), start_point[1] + random.randint(-h//4, h//4))
+            cv2.line(sub_mask, start_point, end_point, 1.0, random.randint(10, 40))
+            start_point = end_point
+        return sub_mask
+
+    if mask_type == 'poly':
+        # Random polygon for sharp tears
+        sub_mask = np.zeros((h, w, 1), dtype=np.float32)
+        num_pts = random.randint(3, 6)
+        pts = np.array([[random.randint(0, w), random.randint(0, h)] for _ in range(num_pts)])
+        cv2.fillPoly(sub_mask, [pts], 1.0)
         return sub_mask
     
     return mask
@@ -103,6 +121,62 @@ def add_yellowing(img, localized=True):
         
     return np.clip(img_res, 0, 1)
 
+def add_folds(img):
+    """Simulate paper fold lines."""
+    draw_img = img.copy()
+    num_folds = random.randint(1, 4)
+    for _ in range(num_folds):
+        if random.random() > 0.5: # Vertical-ish
+            x = random.randint(0, img.shape[1])
+            cv2.line(draw_img, (x, 0), (x + random.randint(-10, 10), img.shape[0]), (0.8, 0.8, 0.8), random.randint(1, 2))
+        else: # Horizontal-ish
+            y = random.randint(0, img.shape[0])
+            cv2.line(draw_img, (0, y), (img.shape[1], y + random.randint(-10, 10)), (0.8, 0.8, 0.8), random.randint(1, 2))
+    return draw_img
+
+def add_water_stains(img):
+    """Simulate water or coffee stains."""
+    h, w, _ = img.shape
+    num_stains = random.randint(1, 3)
+    for _ in range(num_stains):
+        stain_layer = np.zeros((h, w, 1), dtype=np.float32)
+        center = (random.randint(0, w), random.randint(0, h))
+        axes = (random.randint(20, w//3), random.randint(20, h//3))
+        # Brownish stain for ancient look
+        cv2.ellipse(stain_layer, center, axes, random.randint(0, 360), 0, 360, random.uniform(0.1, 0.4), -1)
+        stain_color = np.array([0.4, 0.6, 0.8]) # BGR: Low Blue, High Red
+        img = img * (1 - stain_layer) + (img * stain_color) * stain_layer
+    return np.clip(img, 0, 1)
+
+def add_mold_spots(img):
+    """Simulate dark mold or foxing spots."""
+    h, w, _ = img.shape
+    for _ in range(random.randint(30, 80)):
+        center = (random.randint(0, w), random.randint(0, h))
+        radius = random.randint(1, 3)
+        # Darker spots
+        color = (random.uniform(0.05, 0.2), random.uniform(0.05, 0.2), random.uniform(0.05, 0.2))
+        cv2.circle(img, center, radius, color, -1)
+    return img
+
+def add_noise_patch(img):
+    """Replaces a part of the image with pure random noise."""
+    h, w, c = img.shape
+    mask = get_random_mask(h, w) # Use the existing mask generator
+    noise_patch = np.random.uniform(0, 1, (h, w, c)).astype(np.float32)
+    img = img * (1 - mask) + noise_patch * mask
+    return np.clip(img, 0, 1)
+
+def add_compression(img):
+    """Simulate JPEG compression artifacts."""
+    # Convert back to uint8 for cv2.imencode
+    img_uint8 = (img * 255).astype(np.uint8)
+    quality = random.randint(10, 50)
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), quality]
+    result, encimg = cv2.imencode('.jpg', img_uint8, encode_param)
+    decimg = cv2.imdecode(encimg, 1)
+    return decimg.astype(np.float32) / 255.0
+
 def save_pair(clean_img_uint8, damaged_img_float, output_path, name_prefix, suffix, file_ext):
     clean_dir = output_path / 'clean'
     damaged_dir = output_path / 'damaged'
@@ -111,7 +185,7 @@ def save_pair(clean_img_uint8, damaged_img_float, output_path, name_prefix, suff
     damaged_img_uint8 = (damaged_img_float * 255).astype(np.uint8)
     cv2.imwrite(str(damaged_dir / target_name), damaged_img_uint8)
 
-def process_images_recursive(input_dir, output_dir):
+def process_images_recursive(input_dir, output_dir, multiplier=1):
     input_path = Path(input_dir)
     output_path = Path(output_dir)
     (output_path / 'clean').mkdir(parents=True, exist_ok=True)
@@ -122,7 +196,7 @@ def process_images_recursive(input_dir, output_dir):
     for ext in extensions:
         image_paths.extend(input_path.rglob(ext))
     
-    print(f"Found {len(image_paths)} images. Generating localized damages...")
+    print(f"Found {len(image_paths)} images. Multiplier: {multiplier}. Generating complex damages...")
     
     processed_hashes = set()
     for path in tqdm(image_paths):
@@ -133,20 +207,44 @@ def process_images_recursive(input_dir, output_dir):
         img = cv2.imread(str(path))
         if img is None: continue
         
+        # Resize to 512 for standard training if too large
+        if img.shape[0] > 1024 or img.shape[1] > 1024:
+             img = cv2.resize(img, (1024, 1024), interpolation=cv2.INTER_AREA)
+
         img_float = img.astype(np.float32) / 255.0
         
-        # 1. Localized Blur
-        save_pair(img, add_blur(img_float.copy()), output_path, file_hash, "blur", path.suffix)
-        
-        # 2. Localized Noise
-        save_pair(img, add_noise(img_float.copy()), output_path, file_hash, "noise", path.suffix)
-        
-        # 3. Mixed Realistic
-        damaged_mixed = add_blur(img_float.copy(), localized=random.choice([True, False]))
-        damaged_mixed = add_noise(damaged_mixed, localized=random.choice([True, False]))
-        damaged_mixed = add_yellowing(damaged_mixed, localized=random.choice([True, False]))
-        damaged_mixed = add_scratches(damaged_mixed)
-        save_pair(img, damaged_mixed, output_path, file_hash, "mixed", path.suffix)
+        for m in range(multiplier):
+            # Apply a sequence of random damages (Multiple types per image)
+            damaged = img_float.copy()
+            
+            # Damage List: [Probability, Function]
+            damage_pipeline = [
+                (0.8, lambda i: add_blur(i, localized=random.choice([True, False]))),
+                (0.8, lambda i: add_noise(i, localized=random.choice([True, False]))),
+                (0.6, lambda i: add_yellowing(i, localized=random.choice([True, False]))),
+                (0.7, add_scratches),
+                (0.4, add_folds),
+                (0.4, add_water_stains),
+                (0.5, add_mold_spots),
+                (0.3, add_noise_patch),
+                (0.6, add_compression),
+            ]
+            
+            # Randomly shuffle and apply a subset
+            random.shuffle(damage_pipeline)
+            applied_count = 0
+            for prob, func in damage_pipeline:
+                if random.random() < prob:
+                    damaged = func(damaged)
+                    applied_count += 1
+                if applied_count >= 5: break # Max 5 types per image
+            
+            # Ensure at least one damage is applied
+            if applied_count == 0:
+                damaged = add_noise(damaged)
+            
+            suffix = f"complex_{m}" if multiplier > 1 else "complex"
+            save_pair(img, damaged, output_path, file_hash, suffix, path.suffix)
 
 if __name__ == "__main__":
     import argparse
@@ -154,6 +252,7 @@ if __name__ == "__main__":
     parser.add_argument('--input', type=str, required=True)
     parser.add_argument('--output', type=str, default='../datasets/processed')
     parser.add_argument('--seed', type=int, default=None, help='Random seed for reproducibility')
+    parser.add_argument('--multiplier', type=int, default=1, help='How many damaged images per source')
     args = parser.parse_args()
     
     if args.seed is not None:
@@ -161,4 +260,4 @@ if __name__ == "__main__":
         np.random.seed(args.seed)
         print(f"Random seed set to: {args.seed}")
     
-    process_images_recursive(args.input, args.output)
+    process_images_recursive(args.input, args.output, args.multiplier)
