@@ -100,8 +100,8 @@ class SwinTransformerBlock(nn.Module):
 
         self.register_buffer("attn_mask", attn_mask)
 
-    def forward(self, x):
-        H, W = self.input_resolution
+    def forward(self, x, x_size):
+        H, W = x_size
         B, L, C = x.shape
         assert L == H * W, "input feature has wrong size"
 
@@ -120,7 +120,31 @@ class SwinTransformerBlock(nn.Module):
         x_windows = x_windows.view(-1, self.window_size * self.window_size, C)  # nW*B, window_size*window_size, C
 
         # W-MSA/SW-MSA
-        attn_windows = self.attn(x_windows, mask=self.attn_mask)  # nW*B, window_size*window_size, C
+        if self.shift_size > 0:
+            if getattr(self, "attn_mask", None) is not None and getattr(self, "attn_mask", None).size(0) == int((H / self.window_size) * (W / self.window_size)):
+                attn_mask = self.attn_mask
+            else:
+                img_mask = torch.zeros((1, H, W, 1), device=x.device)  # 1, H, W, 1
+                h_slices = (slice(0, -self.window_size),
+                            slice(-self.window_size, -self.shift_size),
+                            slice(-self.shift_size, None))
+                w_slices = (slice(0, -self.window_size),
+                            slice(-self.window_size, -self.shift_size),
+                            slice(-self.shift_size, None))
+                cnt = 0
+                for h in h_slices:
+                    for w in w_slices:
+                        img_mask[:, h, w, :] = cnt
+                        cnt += 1
+
+                mask_windows = window_partition(img_mask, self.window_size)  # nW, window_size, window_size, 1
+                mask_windows = mask_windows.view(-1, self.window_size * self.window_size)
+                attn_mask = mask_windows.unsqueeze(1) - mask_windows.unsqueeze(2)
+                attn_mask = attn_mask.masked_fill(attn_mask != 0, float(-100.0)).masked_fill(attn_mask == 0, float(0.0))
+        else:
+            attn_mask = None
+
+        attn_windows = self.attn(x_windows, mask=attn_mask)  # nW*B, window_size*window_size, C
 
         # merge windows
         attn_windows = attn_windows.view(-1, self.window_size, self.window_size, C)

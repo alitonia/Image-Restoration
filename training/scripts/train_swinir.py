@@ -165,9 +165,11 @@ def train():
                 print(f"🌟 New Best Model Saved (PSNR: {best_psnr:.2f})")
         else:
             # If no val set, just save the weights every epoch
+            os.makedirs(os.path.dirname(args.weight_path), exist_ok=True)
             torch.save(model.state_dict(), args.weight_path)
 
         # Save checkpoint for progress tracking
+        os.makedirs(os.path.dirname(checkpoint_path), exist_ok=True)
         torch.save({
             'epoch': epoch,
             'model_state_dict': model.state_dict(),

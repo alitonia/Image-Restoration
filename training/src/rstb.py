@@ -61,7 +61,7 @@ class ResidualSwinTransformerBlock(nn.Module):
     def forward(self, x, x_size):
         res = x
         for blk in self.blocks:
-            res = blk(res)
+            res = blk(res, x_size)
 
         x_size = (int(x_size[0]), int(x_size[1]))
         res = self.patch_unembed(res, x_size)

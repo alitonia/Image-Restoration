@@ -21,6 +21,7 @@ rm -f restoration_code.zip
 zip -r restoration_code.zip training/ \
     -x "training/datasets/processed/*" \
     -x "training/datasets/raw/*" \
+    -x "training/datasets/raw_lite/*" \
     -x "training/venv/*" \
     -x "**/__pycache__/*" \
     -x "**/.ipynb_checkpoints/*"

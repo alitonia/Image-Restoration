@@ -153,6 +153,9 @@ def main():
         if accelerator.is_main_process:
             save_path = os.path.join(args.output_dir, f"epoch_{epoch}")
             unet.save_pretrained(save_path)
+            # Save as latest for easy loading in test scripts
+            unet.save_pretrained(os.path.join(args.output_dir, "latest"))
+            
             # Save latest state for resuming
             accelerator.save_state(checkpoint_dir)
             accelerator.print(f"✅ Checkpoint saved at {save_path}")
