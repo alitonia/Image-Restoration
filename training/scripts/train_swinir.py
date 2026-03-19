@@ -88,9 +88,9 @@ def train():
     if device.type == 'cpu':
         print("🛑 ERROR: NO GPU DETECTED. Colab -> Runtime -> Change Runtime Type -> T4 GPU.")
 
-    # Model
     model = create_model(upscale=1).to(device) # upscale=1 for direct restoration
-    criterion = nn.L1Loss()
+    criterion_l1 = nn.L1Loss()
+    criterion_mse = nn.MSELoss() # Punishes distinct anomalous objects quadratically
     optimizer = optim.Adam(model.parameters(), lr=args.lr)
     
     # Modern AMP syntax
@@ -136,7 +136,9 @@ def train():
             # Use AMP for memory efficiency
             with torch.amp.autocast('cuda' if torch.cuda.is_available() else 'cpu'):
                 output = model(damaged)
-                loss = criterion(output, clean)
+                loss_l1 = criterion_l1(output, clean)
+                loss_mse = criterion_mse(output, clean)
+                loss = loss_l1 + (0.5 * loss_mse)
 
             scaler.scale(loss).backward()
             scaler.step(optimizer)

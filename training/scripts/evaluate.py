@@ -92,12 +92,12 @@ def evaluate():
         print(f"Evaluating SD-LoRA model on the whole dataset (this may take a few minutes)...")
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         
-        from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
+        from diffusers import StableDiffusionControlNetImg2ImgPipeline, ControlNetModel
         from controlnet_aux import CannyDetector
         from PIL import Image
         model_id = "runwayml/stable-diffusion-v1-5"
         controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-canny", torch_dtype=torch.float16).to(device)
-        pipe = StableDiffusionControlNetPipeline.from_pretrained(
+        pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
             model_id, 
             controlnet=controlnet,
             torch_dtype=torch.float16
@@ -114,11 +114,16 @@ def evaluate():
             damaged_img = cv2.imread(d_file)
             h, w = clean_img.shape[:2]
             
+            # 1. Structure Skeleton (Filtered to ignore random noise/scratches via median blur)
+            blurred_for_canny = cv2.medianBlur(damaged_img, 9)
+            canny_raw = Image.fromarray(cv2.cvtColor(blurred_for_canny, cv2.COLOR_BGR2RGB)).resize((512, 512))
+            control_image = canny_detector(canny_raw, low_threshold=100, high_threshold=200)
+            
+            # 2. Base colors and local detail layout (The actual damaged image)
             init_image = Image.fromarray(cv2.cvtColor(damaged_img, cv2.COLOR_BGR2RGB)).resize((512, 512))
-            control_image = canny_detector(init_image, low_threshold=100, high_threshold=200)
             
             with torch.autocast(device.type):
-                ai_gen = pipe(prompt=prompt, image=control_image, controlnet_conditioning_scale=1.0, num_inference_steps=20).images[0]
+                ai_gen = pipe(prompt=prompt, image=init_image, control_image=control_image, strength=0.7, controlnet_conditioning_scale=1.0, num_inference_steps=20).images[0]
                 
             ai_gen = np.array(ai_gen.resize((w, h)))
             restored_img = cv2.cvtColor(ai_gen, cv2.COLOR_RGB2BGR)

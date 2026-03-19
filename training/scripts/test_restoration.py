@@ -10,7 +10,7 @@ from tqdm import tqdm
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from src.model import create_model
-from diffusers import StableDiffusionControlNetPipeline, ControlNetModel
+from diffusers import StableDiffusionControlNetImg2ImgPipeline, ControlNetModel
 from controlnet_aux import CannyDetector
 from peft import PeftModel
 
@@ -41,10 +41,10 @@ def main():
     ai_pipe = None
     canny_detector = None
     if args.lora_path:
-        print("⏳ Loading Stable Diffusion Loss-Guided (ControlNet) Pipeline...")
+        print("⏳ Loading Stable Diffusion Loss-Guided (ControlNet+Img2Img) Pipeline...")
         model_id = "runwayml/stable-diffusion-v1-5"
         controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-canny", torch_dtype=torch.float16).to(device)
-        ai_pipe = StableDiffusionControlNetPipeline.from_pretrained(
+        ai_pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
             model_id, 
             controlnet=controlnet,
             torch_dtype=torch.float16
@@ -87,10 +87,17 @@ def main():
         ai_result = np.zeros_like(clean_img)
         if ai_pipe:
             prompt = "a perfectly restored antique photo, high detail, sharp"
+            
+            # 1. Structure Skeleton (Filtered to ignore random noise/scratches via median blur)
+            blurred_for_canny = cv2.medianBlur(damaged_img, 9)
+            canny_raw = Image.fromarray(cv2.cvtColor(blurred_for_canny, cv2.COLOR_BGR2RGB)).resize((512, 512))
+            control_image = canny_detector(canny_raw, low_threshold=100, high_threshold=200)
+            
+            # 2. Base colors and local detail layout (The actual damaged image)
             init_image = Image.fromarray(cv2.cvtColor(damaged_img, cv2.COLOR_BGR2RGB)).resize((512, 512))
-            control_image = canny_detector(init_image, low_threshold=100, high_threshold=200)
+            
             with torch.autocast(device.type):
-                ai_gen = ai_pipe(prompt=prompt, image=control_image, controlnet_conditioning_scale=1.0, num_inference_steps=20).images[0]
+                ai_gen = ai_pipe(prompt=prompt, image=init_image, control_image=control_image, strength=0.7, controlnet_conditioning_scale=1.0, num_inference_steps=20).images[0]
             ai_gen = np.array(ai_gen.resize((w, h)))
             ai_result = cv2.cvtColor(ai_gen, cv2.COLOR_RGB2BGR)
             
