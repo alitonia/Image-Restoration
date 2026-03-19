@@ -49,7 +49,7 @@ def main():
             controlnet=controlnet,
             torch_dtype=torch.float16
         ).to(device)
-        ai_pipe.load_lora_weights(args.lora_path)
+        ai_pipe.unet = PeftModel.from_pretrained(ai_pipe.unet, args.lora_path)
         canny_detector = CannyDetector()
 
     clean_files = sorted(glob(os.path.join(args.test_clean_dir, '*.*')))

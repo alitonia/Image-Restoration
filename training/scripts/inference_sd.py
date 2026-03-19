@@ -4,7 +4,7 @@ import numpy as np
 import argparse
 import os
 from PIL import Image
-from diffusers import StableDiffusionControlNetPipeline, ControlNetModel, UniPCMultistepScheduler
+from diffusers import StableDiffusionControlNetImg2ImgPipeline, ControlNetModel, UniPCMultistepScheduler
 from controlnet_aux import CannyDetector
 
 def main():
@@ -26,7 +26,7 @@ def main():
     )
 
     # 2. Load Pipeline
-    pipe = StableDiffusionControlNetPipeline.from_pretrained(
+    pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
         "runwayml/stable-diffusion-v1-5", 
         controlnet=controlnet,
         torch_dtype=torch.float16 if device == "cuda" else torch.float32
@@ -34,8 +34,9 @@ def main():
 
     # 3. Load custom LoRA if provided
     if args.lora_path:
-        print(f"Loading custom LoRA from {args.lora_path}")
-        pipe.load_lora_weights(args.lora_path)
+        from peft import PeftModel
+        print(f"Loading custom PEFT LoRA from {args.lora_path}")
+        pipe.unet = PeftModel.from_pretrained(pipe.unet, args.lora_path)
 
     # 4. Memory Optimizations for 4GB VRAM
     if device == "cuda":
@@ -52,19 +53,29 @@ def main():
     # Resize to something manageable but keeping aspect ratio
     input_image.thumbnail((512, 512))
     
+    # Structure Skeleton Filter (blur to hide scratches from the geometric control net map)
+    cv_img = np.array(input_image)
+    cv_img_bgr = cv2.cvtColor(cv_img, cv2.COLOR_RGB2BGR)
+    blurred_for_canny = cv2.medianBlur(cv_img_bgr, 7)
+    canny_raw = Image.fromarray(cv2.cvtColor(blurred_for_canny, cv2.COLOR_BGR2RGB))
+    
     canny_detector = CannyDetector()
-    control_image = canny_detector(input_image, low_threshold=100, high_threshold=200)
+    control_image = canny_detector(canny_raw, low_threshold=100, high_threshold=200)
 
     # 6. Inference
     generator = torch.manual_seed(42)
-    result = pipe(
-        prompt=args.prompt,
-        negative_prompt=args.negative_prompt,
-        image=control_image,
-        num_inference_steps=30, # Increased steps for quality
-        generator=generator,
-        controlnet_conditioning_scale=1.0,
-    ).images[0]
+    device_type = "cuda" if torch.cuda.is_available() else "cpu"
+    with torch.autocast(device_type):
+        result = pipe(
+            prompt=args.prompt,
+            negative_prompt=args.negative_prompt,
+            image=input_image,
+            control_image=control_image,
+            strength=0.7,
+            num_inference_steps=30, # Increased steps for quality
+            generator=generator,
+            controlnet_conditioning_scale=1.0,
+        ).images[0]
 
     # 6. Save
     if not os.path.exists(os.path.dirname(args.output)):

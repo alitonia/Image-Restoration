@@ -115,7 +115,11 @@ def add_scratches(img):
             tx += random.randint(-2, 2)
             ty += random.randint(-2, 2)
             
-            segment_thickness = random.randint(1, 6)
+            # Skew distribution: roughly 75% chance of being 1-2px thick, very rare to be 5-6px
+            thicknesses = [1, 2, 3, 4, 5, 6]
+            weights = [50, 25, 15, 7, 2, 1]
+            segment_thickness = random.choices(thicknesses, weights=weights)[0]
+            
             cv2.line(damaged_img, (px, py), (tx, ty), color, segment_thickness)
             px, py = tx, ty
     return damaged_img
@@ -158,7 +162,12 @@ def add_folds(img):
         for i in range(1, num_segments + 1):
             tx = x1 + int((x2 - x1) * i / num_segments)
             ty = y1 + int((y2 - y1) * i / num_segments)
-            segment_thickness = random.randint(1, 8)
+            
+            # Skew distribution: primarily thin folds (1-2px), rapid dropoff for thick folds
+            thicknesses = [1, 2, 3, 4, 5, 6, 7, 8]
+            weights = [45, 25, 15, 7, 4, 2, 1, 1]
+            segment_thickness = random.choices(thicknesses, weights=weights)[0]
+            
             cv2.line(draw_img, (px, py), (tx, ty), color, segment_thickness)
             px, py = tx, ty
             

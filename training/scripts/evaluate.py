@@ -95,6 +95,8 @@ def evaluate():
         from diffusers import StableDiffusionControlNetImg2ImgPipeline, ControlNetModel
         from controlnet_aux import CannyDetector
         from PIL import Image
+        from peft import PeftModel
+        
         model_id = "runwayml/stable-diffusion-v1-5"
         controlnet = ControlNetModel.from_pretrained("lllyasviel/sd-controlnet-canny", torch_dtype=torch.float16).to(device)
         pipe = StableDiffusionControlNetImg2ImgPipeline.from_pretrained(
@@ -102,7 +104,7 @@ def evaluate():
             controlnet=controlnet,
             torch_dtype=torch.float16
         ).to(device)
-        pipe.load_lora_weights(args.lora_path)
+        pipe.unet = PeftModel.from_pretrained(pipe.unet, args.lora_path)
         pipe.set_progress_bar_config(disable=True)
         canny_detector = CannyDetector()
         
@@ -140,6 +142,10 @@ def evaluate():
             count += 1
     else:
         print("Error: Provide either --weights, --lora_path, or --restored_dir")
+        return
+
+    if count == 0:
+        print("\nError: No images were evaluated. Please check if your dataset directories contain images and the paths are correct.")
         return
 
     print(f"\nFinal Results:")
