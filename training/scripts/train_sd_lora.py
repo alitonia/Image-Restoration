@@ -174,7 +174,8 @@ def main():
                 
                 os.makedirs(args.val_dir, exist_ok=True)
                 for i in range(args.num_validation_images):
-                    image = pipeline(args.validation_prompt).images[0]
+                    with torch.autocast(accelerator.device.type):
+                        image = pipeline(args.validation_prompt).images[0]
                     image.save(os.path.join(args.val_dir, f"val_{epoch}_{i}.png"))
                 
                 del pipeline # Free memory

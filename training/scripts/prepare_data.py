@@ -67,17 +67,19 @@ def get_random_mask(h, w):
     return mask
 
 def add_noise(img, localized=True):
-    """Add Gaussian noise to the image, potentially localized."""
+    """Add Gaussian noise to the image (covers at most 1/4 of the image)."""
     h, w, c = img.shape
-    var = random.uniform(0.001, 0.05)
+    var = random.uniform(0.01, 0.15) # Increased variance for more aggressive noise
     gauss = np.random.normal(0, var**0.5, (h, w, c)).astype(np.float32)
     
-    if localized:
-        mask = get_random_mask(h, w)
-        img_noise = img + gauss * mask
-    else:
-        img_noise = img + gauss
-        
+    # Hard lock to 1/4 total area (w/2 * h/2)
+    mask = np.zeros((h, w, 1), dtype=np.float32)
+    max_w, max_h = max(10, int(w * 0.5)), max(10, int(h * 0.5))
+    nw, nh = random.randint(10, max_w), random.randint(10, max_h)
+    x1, y1 = random.randint(0, w - nw), random.randint(0, h - nh)
+    mask[y1:y1+nh, x1:x1+nw, :] = 1.0
+    
+    img_noise = img + gauss * mask
     return np.clip(img_noise, 0, 1)
 
 def add_blur(img, localized=True):
@@ -95,15 +97,27 @@ def add_blur(img, localized=True):
     return np.clip(img_blur, 0, 1)
 
 def add_scratches(img):
-    """Simulate random scratches (already localized by nature)."""
+    """Simulate random scratches with varying thickness along the scratch."""
     damaged_img = img.copy()
     num_scratches = random.randint(3, 15)
     for _ in range(num_scratches):
         x1, y1 = random.randint(0, img.shape[1]), random.randint(0, img.shape[0])
         x2, y2 = random.randint(0, img.shape[1]), random.randint(0, img.shape[0])
-        thickness = random.randint(1, 2)
         color = (random.uniform(0.5, 0.9), random.uniform(0.5, 0.9), random.uniform(0.5, 0.9))
-        cv2.line(damaged_img, (x1, y1), (x2, y2), color, thickness)
+        
+        num_segments = random.randint(5, 20)
+        px, py = x1, y1
+        for i in range(1, num_segments + 1):
+            tx = x1 + int((x2 - x1) * i / num_segments)
+            ty = y1 + int((y2 - y1) * i / num_segments)
+            
+            # slight wobble
+            tx += random.randint(-2, 2)
+            ty += random.randint(-2, 2)
+            
+            segment_thickness = random.randint(1, 6)
+            cv2.line(damaged_img, (px, py), (tx, ty), color, segment_thickness)
+            px, py = tx, ty
     return damaged_img
 
 def add_yellowing(img, localized=True):
@@ -122,16 +136,32 @@ def add_yellowing(img, localized=True):
     return np.clip(img_res, 0, 1)
 
 def add_folds(img):
-    """Simulate paper fold lines."""
+    """Simulate paper fold lines with varying thickness."""
     draw_img = img.copy()
     num_folds = random.randint(1, 4)
     for _ in range(num_folds):
+        color = (0.8, 0.8, 0.8)
+        num_segments = random.randint(10, 30)
+        
         if random.random() > 0.5: # Vertical-ish
-            x = random.randint(0, img.shape[1])
-            cv2.line(draw_img, (x, 0), (x + random.randint(-10, 10), img.shape[0]), (0.8, 0.8, 0.8), random.randint(1, 2))
+            x1 = random.randint(0, img.shape[1])
+            y1 = 0
+            x2 = x1 + random.randint(-20, 20)
+            y2 = img.shape[0]
         else: # Horizontal-ish
-            y = random.randint(0, img.shape[0])
-            cv2.line(draw_img, (0, y), (img.shape[1], y + random.randint(-10, 10)), (0.8, 0.8, 0.8), random.randint(1, 2))
+            x1 = 0
+            y1 = random.randint(0, img.shape[0])
+            x2 = img.shape[1]
+            y2 = y1 + random.randint(-20, 20)
+            
+        px, py = x1, y1
+        for i in range(1, num_segments + 1):
+            tx = x1 + int((x2 - x1) * i / num_segments)
+            ty = y1 + int((y2 - y1) * i / num_segments)
+            segment_thickness = random.randint(1, 8)
+            cv2.line(draw_img, (px, py), (tx, ty), color, segment_thickness)
+            px, py = tx, ty
+            
     return draw_img
 
 def add_water_stains(img):
@@ -160,9 +190,16 @@ def add_mold_spots(img):
     return img
 
 def add_noise_patch(img):
-    """Replaces a part of the image with pure random noise."""
+    """Replaces a part of the image with pure random noise, covering at most 1/4 of total area."""
     h, w, c = img.shape
-    mask = get_random_mask(h, w) # Use the existing mask generator
+    
+    # Hard lock to 1/4 total area (w/2 * h/2)
+    mask = np.zeros((h, w, 1), dtype=np.float32)
+    max_w, max_h = max(10, int(w * 0.5)), max(10, int(h * 0.5))
+    nw, nh = random.randint(10, max_w), random.randint(10, max_h)
+    x1, y1 = random.randint(0, w - nw), random.randint(0, h - nh)
+    mask[y1:y1+nh, x1:x1+nw, :] = 1.0
+    
     noise_patch = np.random.uniform(0, 1, (h, w, c)).astype(np.float32)
     img = img * (1 - mask) + noise_patch * mask
     return np.clip(img, 0, 1)
@@ -235,7 +272,6 @@ def process_images_recursive(input_dir, output_dir, multiplier=1, split_ratio=0.
                 # Damage List: [Probability, Function]
                 damage_pipeline = [
                     (0.8, lambda i: add_blur(i, localized=random.choice([True, False]))),
-                    (0.8, lambda i: add_noise(i, localized=random.choice([True, False]))),
                     (0.6, lambda i: add_yellowing(i, localized=random.choice([True, False]))),
                     (0.7, add_scratches),
                     (0.4, add_folds),
@@ -252,11 +288,10 @@ def process_images_recursive(input_dir, output_dir, multiplier=1, split_ratio=0.
                     if random.random() < prob:
                         damaged = func(damaged)
                         applied_count += 1
-                    if applied_count >= 5: break # Max 5 types per image
+                    if applied_count >= 4: break # Max 4 random types
                 
-                # Ensure at least one damage is applied
-                if applied_count == 0:
-                    damaged = add_noise(damaged)
+                # Ensure noise is ALWAYS applied to every single output
+                damaged = add_noise(damaged)
                 
                 suffix = f"complex_{m}" if multiplier > 1 else "complex"
                 save_pair(img, damaged, subset_output, file_hash, suffix, path.suffix)
