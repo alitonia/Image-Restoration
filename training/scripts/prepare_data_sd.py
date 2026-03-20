@@ -51,6 +51,8 @@ def get_random_mask(h, w, mask_type=None):
             axes = (random.randint(30, w//3), random.randint(30, h//3))
             cv2.ellipse(sub_mask, center, axes, random.randint(0, 360), 0, 360, 1.0, -1)
         sub_mask = cv2.GaussianBlur(sub_mask, (51, 51), 0)
+        if len(sub_mask.shape) == 2:
+            sub_mask = np.expand_dims(sub_mask, axis=-1)
         return sub_mask
     
     return mask
@@ -139,7 +141,7 @@ def save_pair(clean_img_uint8, damaged_img_float, output_path, name_prefix, suff
     damaged_img_uint8 = (damaged_img_float * 255).astype(np.uint8)
     cv2.imwrite(str(damaged_dir / target_name), damaged_img_uint8)
 
-def process_images_for_sd(input_dir, output_dir, multiplier=1, split_ratio=0.9):
+def process_images_for_sd(input_dir, output_dir, multiplier=1, split_ratio=0.9, limit=None):
     input_path = Path(input_dir)
     output_path = Path(output_dir)
 
@@ -148,6 +150,11 @@ def process_images_for_sd(input_dir, output_dir, multiplier=1, split_ratio=0.9):
     for ext in extensions:
         image_paths.extend(input_path.rglob(ext))
     
+    # Sort to ensure consistent "first 10" if seed isn't provided
+    image_paths = sorted(image_paths)
+    if limit is not None and limit > 0:
+        image_paths = image_paths[:limit]
+        
     random.shuffle(image_paths)
     split_idx = int(len(image_paths) * split_ratio)
     train_paths = image_paths[:split_idx]
@@ -211,6 +218,7 @@ if __name__ == "__main__":
     parser.add_argument('--seed', type=int, default=None)
     parser.add_argument('--multiplier', type=int, default=1)
     parser.add_argument('--split_ratio', type=float, default=0.9)
+    parser.add_argument('--limit', type=int, default=None, help='Limit processing to first N images')
     args = parser.parse_args()
     
     if args.seed is not None:
@@ -218,4 +226,4 @@ if __name__ == "__main__":
         np.random.seed(args.seed)
         print(f"Random seed set to: {args.seed}")
     
-    process_images_for_sd(args.input, args.output, args.multiplier, args.split_ratio)
+    process_images_for_sd(args.input, args.output, args.multiplier, args.split_ratio, args.limit)
