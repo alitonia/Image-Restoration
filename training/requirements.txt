@@ -8,6 +8,7 @@ transformers
 accelerate
 controlnet_aux
 peft
+mediapipe>=0.10.21
 
 # Image Processing
 opencv-python
