@@ -2,14 +2,18 @@ import torch
 import sys
 import os
 import cv2
-sys.path.append('/home/alitonia/work/Image-Restoration/training')
+import argparse
+
+# Dynamically add the 'training' directory to sys.path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+training_dir = os.path.join(project_root, 'training')
+sys.path.append(training_dir)
+
 from src.model import create_model
 from scripts.train_swinir import RestorationDataset
 
-def test_on_real_dataset():
-    clean_dir = '/home/alitonia/work/Image-Restoration/training/datasets/processed/train/clean'
-    damaged_dir = '/home/alitonia/work/Image-Restoration/training/datasets/processed/train/damaged'
-    
+def test_on_real_dataset(clean_dir, damaged_dir):
     # Check if dataset exists
     if not os.path.exists(clean_dir):
         print(f"Skipping real dataset test, {clean_dir} does not exist")
@@ -47,4 +51,9 @@ def test_on_real_dataset():
         print(f"❌ Error during validation forward pass: {e}")
 
 if __name__ == '__main__':
-    test_on_real_dataset()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--clean_dir', type=str, default=os.path.join(project_root, 'processed_data', 'training', 'datasets', 'processed', 'train', 'clean'))
+    parser.add_argument('--damaged_dir', type=str, default=os.path.join(project_root, 'processed_data', 'training', 'datasets', 'processed', 'train', 'damaged'))
+    args = parser.parse_args()
+    
+    test_on_real_dataset(args.clean_dir, args.damaged_dir)
